@@ -636,6 +636,16 @@ foreach(_header ${headers})
 endforeach()
 add_custom_target(add_srsran_headers SOURCES ${HEADERS_ALL})
 
+find_package(YAMLCPP)
+if (YAMLCPP_FOUND)
+  include_directories(${YAMLCPP_INCLUDE_DIR})
+  link_directories(${YAMLCPP_LIBRARY})
+else (YAMLCPP_FOUND)
+  message(FATAL_ERROR "yaml-cpp is required to build ${CMAKE_PROJECT_NAME}")
+endif (YAMLCPP_FOUND)
+
+
+
 
 include_directories(lib/include)
 add_subdirectory(lib)

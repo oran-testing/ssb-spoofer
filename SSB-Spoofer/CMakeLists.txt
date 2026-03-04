@@ -23,14 +23,6 @@ set_target_properties(ssb_spoofer PROPERTIES
     LINKER_LANGUAGE CXX
 )
 
-find_package(YAMLCPP)
-if (YAMLCPP_FOUND)
-  include_directories(${YAMLCPP_INCLUDE_DIR})
-  link_directories(${YAMLCPP_LIBRARY})
-else (YAMLCPP_FOUND)
-  message(FATAL_ERROR "yaml-cpp is required to build ${CMAKE_PROJECT_NAME}")
-endif (YAMLCPP_FOUND)
-
 target_include_directories(ssb_spoofer PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/${SPOOFER_HDR_DIR}"
 )
@@ -61,6 +53,7 @@ set_target_properties(ssb_file_analyzer PROPERTIES
     LINKER_LANGUAGE CXX
 )
 
+
 target_include_directories(ssb_file_analyzer PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/${SPOOFER_HDR_DIR}"
 )
@@ -72,6 +65,7 @@ target_link_libraries(ssb_file_analyzer PRIVATE
     support
     srslog
     pthread
+		yaml-cpp
 )
 
 install(TARGETS ssb_spoofer ssb_file_analyzer DESTINATION /usr/local/bin OPTIONAL)

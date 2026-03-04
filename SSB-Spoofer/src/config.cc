@@ -5,158 +5,118 @@
 #include <iostream>
 #include <sstream>
 #include <map>
+#include <yaml-cpp/yaml.h>
 
 namespace ssb_spoofer {
 
-// parses basic YAML-style config file
-static std::map<std::string, std::string> parse_config_file(const std::string& filename) {
-  std::map<std::string, std::string> config_map;
-  std::ifstream file(filename);
-  
-  if (!file.is_open()) {
-      std::cerr << "[!] couldn't open config: " << filename << "\n";
-      return config_map;
-  }
-  
-  std::string line;
-  std::string current_section;
-  
-  while (std::getline(file, line)) {
-      // strip comments
-      size_t comment_pos = line.find('#');
-      if (comment_pos != std::string::npos) {
-      line = line.substr(0, comment_pos);
-      }
-      
-      // trim whitespace
-      size_t start = line.find_first_not_of(" \t");
-      if (start == std::string::npos) continue;
-      size_t end = line.find_last_not_of(" \t");
-      line = line.substr(start, end - start + 1);
-      
-      if (line.empty()) continue;
-      
-      // section headers end with :
-      if (line.back() == ':' && line.find(':') == line.length() - 1) {
-      current_section = line.substr(0, line.length() - 1);
-      continue;
-      }
-      
-      // parse key: value
-      size_t colon_pos = line.find(':');
-      if (colon_pos != std::string::npos) {
-      std::string key = line.substr(0, colon_pos);
-      std::string value = line.substr(colon_pos + 1);
-      
-      // trim
-      key.erase(0, key.find_first_not_of(" \t"));
-      key.erase(key.find_last_not_of(" \t") + 1);
-      value.erase(0, value.find_first_not_of(" \t"));
-      value.erase(value.find_last_not_of(" \t") + 1);
-      
-      // remove quotes
-      if (value.front() == '"' && value.back() == '"') {
-          value = value.substr(1, value.length() - 2);
-      }
-      
-      std::string full_key = current_section.empty() ? key : current_section + "." + key;
-      config_map[full_key] = value;
-      }
-  }
-  
-  return config_map;
+bool ConfigParser::load_from_file(const std::string& filename, Config& config)
+{
+    YAML::Node root;
+
+    try {
+        root = YAML::LoadFile(filename);
+    } catch (const std::exception& e) {
+        std::cerr << "[!] Failed to load config file: " << e.what() << "\n";
+        return false;
+    }
+
+    if (!root) {
+        std::cerr << "[!] Empty config file\n";
+        return false;
+    }
+
+
+    // ---------------- RF ----------------
+    if (root["rf"]) {
+        auto rf = root["rf"];
+
+        config.rf.device_name = rf["device_name"] ? rf["device_name"].as<std::string>() : "uhd";
+        config.rf.device_args = rf["device_args"] ? rf["device_args"].as<std::string>() : "";
+
+        config.rf.rx_freq_hz  = rf["rx_freq_hz"] ? rf["rx_freq_hz"].as<double>() : 3510000000.0;
+        config.rf.tx_freq_hz  = rf["tx_freq_hz"] ? rf["tx_freq_hz"].as<double>() : 3510000000.0;
+        config.rf.srate_hz    = rf["srate_hz"]   ? rf["srate_hz"].as<double>()   : 23040000.0;
+
+        config.rf.rx_gain_db  = rf["rx_gain_db"] ? rf["rx_gain_db"].as<double>() : 40.0;
+        config.rf.tx_gain_db  = rf["tx_gain_db"] ? rf["tx_gain_db"].as<double>() : 60.0;
+    }
+
+    if (root["ssb"]) {
+        auto ssb = root["ssb"];
+
+        config.ssb.pattern            = ssb["pattern"] ? ssb["pattern"].as<std::string>() : "C";
+        config.ssb.scs_khz            = ssb["scs_khz"] ? ssb["scs_khz"].as<uint32_t>() : 30;
+        config.ssb.periodicity_ms     = ssb["periodicity_ms"] ? ssb["periodicity_ms"].as<uint32_t>() : 20;
+        config.ssb.ssb_freq_offset_hz = ssb["ssb_freq_offset_hz"] ? ssb["ssb_freq_offset_hz"].as<double>() : 0.0;
+
+        config.ssb.beta_pss       = ssb["beta_pss"] ? ssb["beta_pss"].as<float>() : 0.0f;
+        config.ssb.beta_sss       = ssb["beta_sss"] ? ssb["beta_sss"].as<float>() : 0.0f;
+        config.ssb.beta_pbch      = ssb["beta_pbch"] ? ssb["beta_pbch"].as<float>() : 0.0f;
+        config.ssb.beta_pbch_dmrs = ssb["beta_pbch_dmrs"] ? ssb["beta_pbch_dmrs"].as<float>() : 0.0f;
+    }
+
+    if (root["attack"]) {
+        auto atk = root["attack"];
+
+        config.attack.target_pci              = atk["target_pci"] ? atk["target_pci"].as<uint32_t>() : 0;
+        config.attack.scan_for_target         = atk["scan_for_target"] ? atk["scan_for_target"].as<bool>() : true;
+        config.attack.modify_cell_barred      = atk["modify_cell_barred"] ? atk["modify_cell_barred"].as<bool>() : true;
+        config.attack.cell_barred_value       = atk["cell_barred_value"] ? atk["cell_barred_value"].as<bool>() : true;
+
+        config.attack.modify_coreset0_idx     = atk["modify_coreset0_idx"] ? atk["modify_coreset0_idx"].as<bool>() : false;
+        config.attack.coreset0_idx_value      = atk["coreset0_idx_value"] ? atk["coreset0_idx_value"].as<uint32_t>() : 15;
+
+        config.attack.modify_ss0_idx          = atk["modify_ss0_idx"] ? atk["modify_ss0_idx"].as<bool>() : false;
+        config.attack.ss0_idx_value           = atk["ss0_idx_value"] ? atk["ss0_idx_value"].as<uint32_t>() : 15;
+
+        config.attack.modify_intra_freq_resel = atk["modify_intra_freq_resel"] ? atk["modify_intra_freq_resel"].as<bool>() : false;
+        config.attack.intra_freq_resel_value  = atk["intra_freq_resel_value"] ? atk["intra_freq_resel_value"].as<bool>() : false;
+
+        config.attack.tx_power_offset_db      = atk["tx_power_offset_db"] ? atk["tx_power_offset_db"].as<double>() : 0.0;
+        config.attack.continuous_tx           = atk["continuous_tx"] ? atk["continuous_tx"].as<bool>() : true;
+
+        config.attack.max_bursts        = atk["max_bursts"] ? atk["max_bursts"].as<uint64_t>() : 0;
+        config.attack.burst_interval_us = atk["burst_interval_us"] ? atk["burst_interval_us"].as<uint32_t>() : 500;
+        config.attack.burst_length_ms   = atk["burst_length_ms"] ? atk["burst_length_ms"].as<uint32_t>() : 1;
+    }
+
+    if (root["operation"]) {
+        auto op = root["operation"];
+
+        config.operation.scan_duration_sec = op["scan_duration_sec"] ? op["scan_duration_sec"].as<double>() : 10.0;
+        config.operation.log_level         = op["log_level"] ? op["log_level"].as<std::string>() : "info";
+        config.operation.log_file          = op["log_file"] ? op["log_file"].as<std::string>() : "ssb_spoofer.log";
+        config.operation.save_samples      = op["save_samples"] ? op["save_samples"].as<bool>() : false;
+        config.operation.samples_file      = op["samples_file"] ? op["samples_file"].as<std::string>() : "rx_samples.dat";
+    }
+
+		bool enable_autoconfigure = root["enable_autoconfigure"] ? root["enable_autoconfigure"].as<bool>() : false;
+		if(enable_autoconfigure){
+			if(!load_from_influxdb(config)) return false;
+		}
+
+    return validate(config);
 }
 
-template<typename T>
-static T get_value(const std::map<std::string, std::string>& config_map,
-             const std::string& key, const T& default_value) {
-  auto it = config_map.find(key);
-  if (it == config_map.end()) {
-      return default_value;
-  }
-  
-  std::istringstream iss(it->second);
-  T value;
-  if (!(iss >> value)) {
-      return default_value;
-  }
-  return value;
+static bool load_from_influxdb(Config& config) {
+	if(!root["influxdb"]) return false;
+
+	auto db = root["influxdb"];
+
+	config.database.host = db["scan_duration_sec"] ? db["scan_duration_sec"].as<double>() : 10.0;
+	
+
+struct DatabaseConfig {
+  std::string host;
+  uint32_t port;
+  std::string org;
+  std::string token;
+  std::string bucket;
+  std::string data_id;
+};
+
 }
 
-template<>
-std::string get_value<std::string>(const std::map<std::string, std::string>& config_map,
-                              const std::string& key, const std::string& default_value) {
-  auto it = config_map.find(key);
-  return (it != config_map.end()) ? it->second : default_value;
-}
-
-template<>
-bool get_value<bool>(const std::map<std::string, std::string>& config_map,
-               const std::string& key, const bool& default_value) {
-  auto it = config_map.find(key);
-  if (it == config_map.end()) {
-      return default_value;
-  }
-  
-  std::string value = it->second;
-  return (value == "true" || value == "True" || value == "TRUE" || value == "1");
-}
-
-bool ConfigParser::load_from_file(const std::string& filename, Config& config) {
-  auto config_map = parse_config_file(filename);
-  
-  if (config_map.empty()) {
-      std::cerr << "[!] config file empty or parse failed\n";
-      return false;
-  }
-  
-  // RF config
-  config.rf.device_name                 = get_value<std::string>(config_map, "rf.device_name", "uhd");
-  config.rf.device_args                 = get_value<std::string>(config_map, "rf.device_args", "");
-  config.rf.rx_freq_hz                  = get_value<double>(config_map, "rf.rx_freq_hz", 3510000000.0);
-  config.rf.tx_freq_hz                  = get_value<double>(config_map, "rf.tx_freq_hz", 3510000000.0);
-  config.rf.srate_hz                    = get_value<double>(config_map, "rf.sample_rate_hz", 23040000.0);
-  config.rf.rx_gain_db                  = get_value<double>(config_map, "rf.rx_gain_db", 40.0);
-  config.rf.tx_gain_db                  = get_value<double>(config_map, "rf.tx_gain_db", 60.0);
-  
-  // SSB config
-  config.ssb.pattern                    = get_value<std::string>(config_map, "ssb.pattern", "C");
-  config.ssb.scs_khz                    = get_value<uint32_t>(config_map, "ssb.scs_khz", 30);
-  config.ssb.periodicity_ms             = get_value<uint32_t>(config_map, "ssb.periodicity_ms", 20);
-  config.ssb.ssb_freq_offset_hz         = get_value<double>(config_map, "ssb.ssb_freq_offset_hz", 0.0);
-  config.ssb.beta_pss                   = get_value<float>(config_map, "ssb.beta_pss", 0.0f);
-  config.ssb.beta_sss                   = get_value<float>(config_map, "ssb.beta_sss", 0.0f);
-  config.ssb.beta_pbch                  = get_value<float>(config_map, "ssb.beta_pbch", 0.0f);
-  config.ssb.beta_pbch_dmrs             = get_value<float>(config_map, "ssb.beta_pbch_dmrs", 0.0f);
-  
-  // attack config
-  config.attack.target_pci              = get_value<uint32_t>(config_map, "attack.target_pci", 0);
-  config.attack.scan_for_target         = get_value<bool>(config_map, "attack.scan_for_target", true);
-  config.attack.modify_cell_barred      = get_value<bool>(config_map, "attack.modify_cell_barred", true);
-  config.attack.cell_barred_value       = get_value<bool>(config_map, "attack.cell_barred_value", true);
-  config.attack.modify_coreset0_idx     = get_value<bool>(config_map, "attack.modify_coreset0_idx", false);
-  config.attack.coreset0_idx_value      = get_value<uint32_t>(config_map, "attack.coreset0_idx_value", 15);
-  config.attack.modify_ss0_idx          = get_value<bool>(config_map, "attack.modify_ss0_idx", false);
-  config.attack.ss0_idx_value           = get_value<uint32_t>(config_map, "attack.ss0_idx_value", 15);
-  config.attack.modify_intra_freq_resel = get_value<bool>(config_map, "attack.modify_intra_freq_resel", false);
-  config.attack.intra_freq_resel_value  = get_value<bool>(config_map, "attack.intra_freq_resel_value", false);
-  config.attack.tx_power_offset_db      = get_value<double>(config_map, "attack.tx_power_offset_db", 0.0);
-  config.attack.continuous_tx           = get_value<bool>(config_map, "attack.continuous_tx", true);
-  
-  // Parse burst control parameters
-  config.attack.max_bursts              = get_value<uint64_t>(config_map, "attack.max_bursts", 0);
-  config.attack.burst_interval_us       = get_value<uint32_t>(config_map, "attack.burst_interval_us", 500);
-  config.attack.burst_length_ms         = get_value<uint32_t>(config_map, "attack.burst_length_ms", 1);
-  
-  // operation config
-  config.operation.scan_duration_sec    = get_value<double>(config_map, "operation.scan_duration_sec", 10.0);
-  config.operation.log_level            = get_value<std::string>(config_map, "operation.log_level", "info");
-  config.operation.log_file             = get_value<std::string>(config_map, "operation.log_file", "ssb_spoofer.log");
-  config.operation.save_samples         = get_value<bool>(config_map, "operation.save_samples", false);
-  config.operation.samples_file         = get_value<std::string>(config_map, "operation.samples_file", "rx_samples.dat");
-  
-  return validate(config);
-}
 
 bool ConfigParser::validate(const Config& config) {
   bool valid = true;

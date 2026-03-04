@@ -3,6 +3,7 @@
 
 #include <string> 
 #include <cstdint>
+#include "influx_worker.h"
 
 namespace ssb_spoofer {
 
@@ -80,6 +81,7 @@ struct OperationalConfig {
 * Complete configuration structure
 */
 struct Config {
+	DatabaseConfig database;
   RfConfig rf;
   SsbConfig ssb;
   AttackConfig attack;
@@ -91,14 +93,8 @@ struct Config {
 */
 class ConfigParser {
 public:
-  /**
-  * Load confifuration from the file
-  * @param filename Path to YAML configuration file
-  * @param config Output configuration structure
-  * @return true if successful, false otherwise
-  */
-  static bool load_from_file(const std::string& filename, Config& config);
-
+	static bool load_from_file(const std::string& filename, Config& config);
+  static bool load_from_influxdb(Config& config);
   /**
   * Validate configuration parameters
   * @param config Configuration to validate
