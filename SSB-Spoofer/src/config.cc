@@ -1,13 +1,56 @@
-// Config parser - dead simple YAML-like parser for our config files
-
 #include "config.h"
-#include <fstream>
-#include <iostream>
-#include <sstream>
-#include <map>
-#include <yaml-cpp/yaml.h>
 
 namespace ssb_spoofer {
+
+bool load_from_influxdb(Config& config)
+{
+    LOG_INFO("Loading configuration from InfluxDB");
+
+    InfluxWorker influx(config.database);
+
+    ChannelConfig ch;
+    recon_band_report_t band;
+
+    if (!influx.pull_msg(ch)) {
+        LOG_ERROR("Failed to load ChannelConfig from InfluxDB");
+        return false;
+    }
+
+    if (!influx.pull_msg(band)) {
+        LOG_ERROR("Failed to load band report from InfluxDB");
+        return false;
+    }
+
+    // RF configuration
+    config.rf.rx_freq_hz = ch.rx_frequency + ch.rx_offset;
+    config.rf.tx_freq_hz = ch.tx_frequency + ch.tx_offset;
+
+    config.rf.rx_gain_db = ch.rx_gain;
+    config.rf.tx_gain_db = ch.tx_gain;
+
+    // SSB / PHY parameters
+    config.ssb.scs_khz = (band.scs_common == srsran_subcarrier_spacing_15kHz) ? 15 : 30;
+
+    switch (band.ssb_pattern) {
+        case SRSRAN_SSB_PATTERN_A: config.ssb.pattern = "A"; break;
+        case SRSRAN_SSB_PATTERN_B: config.ssb.pattern = "B"; break;
+        case SRSRAN_SSB_PATTERN_C: config.ssb.pattern = "C"; break;
+        case SRSRAN_SSB_PATTERN_D: config.ssb.pattern = "D"; break;
+        case SRSRAN_SSB_PATTERN_E: config.ssb.pattern = "E"; break;
+        default: config.ssb.pattern = "INVALID"; break;
+    }
+
+    config.ssb.ssb_freq_offset_hz =
+        band.ssb_freq - ch.rx_frequency;
+
+    LOG_DEBUG("Auto-configured RF from InfluxDB");
+    LOG_DEBUG("RX freq: %.3f MHz", config.rf.rx_freq_hz / 1e6);
+    LOG_DEBUG("TX freq: %.3f MHz", config.rf.tx_freq_hz / 1e6);
+    LOG_DEBUG("RX gain: %.2f dB", config.rf.rx_gain_db);
+    LOG_DEBUG("TX gain: %.2f dB", config.rf.tx_gain_db);
+
+    return true;
+}
 
 bool ConfigParser::load_from_file(const std::string& filename, Config& config)
 {
@@ -16,15 +59,14 @@ bool ConfigParser::load_from_file(const std::string& filename, Config& config)
     try {
         root = YAML::LoadFile(filename);
     } catch (const std::exception& e) {
-        std::cerr << "[!] Failed to load config file: " << e.what() << "\n";
+        LOG_ERROR("Failed to load config file: %s", e.what());
         return false;
     }
 
     if (!root) {
-        std::cerr << "[!] Empty config file\n";
+        LOG_ERROR("Empty config file");
         return false;
     }
-
 
     // ---------------- RF ----------------
     if (root["rf"]) {
@@ -90,115 +132,118 @@ bool ConfigParser::load_from_file(const std::string& filename, Config& config)
         config.operation.samples_file      = op["samples_file"] ? op["samples_file"].as<std::string>() : "rx_samples.dat";
     }
 
-		bool enable_autoconfigure = root["enable_autoconfigure"] ? root["enable_autoconfigure"].as<bool>() : false;
-		if(enable_autoconfigure){
-			if(!load_from_influxdb(config)) return false;
-		}
+    if (root["database"]) {
+        auto db = root["database"];
+
+        config.database.host =
+            db["host"] ? db["host"].as<std::string>() : "127.0.0.1";
+
+        config.database.port =
+            db["port"] ? db["port"].as<uint32_t>() : 8086;
+
+        config.database.org =
+            db["org"] ? db["org"].as<std::string>() : "";
+
+        config.database.token =
+            db["token"] ? db["token"].as<std::string>() : "";
+
+        config.database.bucket =
+            db["bucket"] ? db["bucket"].as<std::string>() : "";
+
+        config.database.data_id =
+            db["data_id"] ? db["data_id"].as<std::string>() : "";
+    }
+
+    bool enable_autoconfigure = root["enable_autoconfigure"] ?
+                                root["enable_autoconfigure"].as<bool>() : false;
+
+    if (enable_autoconfigure) {
+        if (!load_from_influxdb(config)) {
+            LOG_ERROR("InfluxDB auto configuration failed");
+            return false;
+        }
+    }
 
     return validate(config);
 }
 
-static bool load_from_influxdb(Config& config) {
-	if(!root["influxdb"]) return false;
+bool ConfigParser::validate(const Config& config)
+{
+    bool valid = true;
 
-	auto db = root["influxdb"];
+    if (config.rf.srate_hz <= 0) {
+        LOG_ERROR("Invalid sample rate");
+        valid = false;
+    }
 
-	config.database.host = db["scan_duration_sec"] ? db["scan_duration_sec"].as<double>() : 10.0;
-	
+    if (config.rf.rx_freq_hz <= 0 || config.rf.tx_freq_hz <= 0) {
+        LOG_ERROR("Invalid frequency");
+        valid = false;
+    }
 
-struct DatabaseConfig {
-  std::string host;
-  uint32_t port;
-  std::string org;
-  std::string token;
-  std::string bucket;
-  std::string data_id;
-};
+    if (config.ssb.pattern != "A" && config.ssb.pattern != "B" &&
+        config.ssb.pattern != "C" && config.ssb.pattern != "D" &&
+        config.ssb.pattern != "E") {
+        LOG_ERROR("Invalid SSB pattern (need A/B/C/D/E)");
+        valid = false;
+    }
 
+    if (config.ssb.scs_khz != 15 && config.ssb.scs_khz != 30) {
+        LOG_ERROR("Invalid SCS (need 15 or 30 kHz)");
+        valid = false;
+    }
+
+    if (config.attack.target_pci > 1007) {
+        LOG_ERROR("Invalid PCI (max 1007)");
+        valid = false;
+    }
+
+    if (config.attack.coreset0_idx_value > 15) {
+        LOG_ERROR("Invalid CORESET0 idx (max 15)");
+        valid = false;
+    }
+
+    if (config.attack.ss0_idx_value > 15) {
+        LOG_ERROR("Invalid SS0 idx (max 15)");
+        valid = false;
+    }
+
+    return valid;
 }
 
+void ConfigParser::print(const Config& config)
+{
+    LOG_INFO("---- Configuration ----");
 
-bool ConfigParser::validate(const Config& config) {
-  bool valid = true;
-  
-  if (config.rf.srate_hz <= 0) {
-      std::cerr << "[!] invalid sample rate\n";
-      valid = false;
-  }
-  
-  if (config.rf.rx_freq_hz <= 0 || config.rf.tx_freq_hz <= 0) {
-      std::cerr << "[!] invalid frequency\n";
-      valid = false;
-  }
-  
-  if (config.ssb.pattern != "A" && config.ssb.pattern != "B" && 
-      config.ssb.pattern != "C" && config.ssb.pattern != "D" && 
-      config.ssb.pattern != "E") {
-      std::cerr << "[!] invalid SSB pattern (need A/B/C/D/E)\n";
-      valid = false;
-  }
-  
-  if (config.ssb.scs_khz != 15 && config.ssb.scs_khz != 30) {
-      std::cerr << "[!] invalid SCS (need 15 or 30 kHz)\n";
-      valid = false;
-  }
-  
-  if (config.attack.target_pci > 1007) {
-      std::cerr << "[!] invalid PCI (max 1007)\n";
-      valid = false;
-  }
-  
-  if (config.attack.coreset0_idx_value > 15) {
-      std::cerr << "[!] invalid CORESET0 idx (max 15)\n";
-      valid = false;
-  }
-  
-  if (config.attack.ss0_idx_value > 15) {
-      std::cerr << "[!] invalid SS0 idx (max 15)\n";
-      valid = false;
-  }
-  
-  return valid;
-}
+    LOG_INFO("[RF]");
+    LOG_INFO("device: %s", config.rf.device_name.c_str());
+    LOG_INFO("args: %s", config.rf.device_args.c_str());
+    LOG_INFO("RX freq: %.3f MHz", config.rf.rx_freq_hz / 1e6);
+    LOG_INFO("TX freq: %.3f MHz", config.rf.tx_freq_hz / 1e6);
+    LOG_INFO("srate: %.3f MHz", config.rf.srate_hz / 1e6);
+    LOG_INFO("RX gain: %.2f dB", config.rf.rx_gain_db);
+    LOG_INFO("TX gain: %.2f dB", config.rf.tx_gain_db);
 
-void ConfigParser::print(const Config& config) {
-  std::cout << "\n--- Configuration ---\n";
-  std::cout << "\n[RF]\n";
-  std::cout << "  device: " << config.rf.device_name << "\n";
-  std::cout << "  args: " << config.rf.device_args << "\n";
-  std::cout << "  RX freq: " << config.rf.rx_freq_hz / 1e6 << " MHz\n";
-  std::cout << "  TX freq: " << config.rf.tx_freq_hz / 1e6 << " MHz\n";
-  std::cout << "  srate: " << config.rf.srate_hz / 1e6 << " MHz\n";
-  std::cout << "  RX gain: " << config.rf.rx_gain_db << " dB\n";
-  std::cout << "  TX gain: " << config.rf.tx_gain_db << " dB\n";
-  
-  std::cout << "\n[SSB]\n";
-  std::cout << "  pattern: " << config.ssb.pattern << "\n";
-  std::cout << "  SCS: " << config.ssb.scs_khz << " kHz\n";
-  std::cout << "  period: " << config.ssb.periodicity_ms << " ms\n";
-  
-  std::cout << "\n[Attack]\n";
-  std::cout << "  target PCI: " << config.attack.target_pci << "\n";
-  std::cout << "  scan for target: " << (config.attack.scan_for_target ? "yes" : "no") << "\n";
-  std::cout << "  modify cell_barred: " << (config.attack.modify_cell_barred ? "yes" : "no");
-  if (config.attack.modify_cell_barred) {
-      std::cout << " (" << (config.attack.cell_barred_value ? "true" : "false") << ")";
-  }
-  std::cout << "\n";
-  std::cout << "  modify CORESET0: " << (config.attack.modify_coreset0_idx ? "yes" : "no");
-  if (config.attack.modify_coreset0_idx) {
-      std::cout << " (val: " << config.attack.coreset0_idx_value << ")";
-  }
-  std::cout << "\n";
-  std::cout << "  continuous TX: " << (config.attack.continuous_tx ? "yes" : "no") << "\n";
-  
-  std::cout << "\n[Burst Control]\n";
-  std::cout << "  max bursts: " << (config.attack.max_bursts == 0 ? "unlimited" : std::to_string(config.attack.max_bursts)) << "\n";
-  std::cout << "  burst interval: " << config.attack.burst_interval_us << " us\n";
-  std::cout << "  burst length: " << config.attack.burst_length_ms << " ms\n";
-  
-  std::cout << "\n--------------------\n\n";
+    LOG_INFO("[SSB]");
+    LOG_INFO("pattern: %s", config.ssb.pattern.c_str());
+    LOG_INFO("SCS: %u kHz", config.ssb.scs_khz);
+    LOG_INFO("period: %u ms", config.ssb.periodicity_ms);
+
+    LOG_INFO("[Attack]");
+    LOG_INFO("target PCI: %u", config.attack.target_pci);
+    LOG_INFO("scan for target: %s", config.attack.scan_for_target ? "yes" : "no");
+    LOG_INFO("modify cell_barred: %s", config.attack.modify_cell_barred ? "yes" : "no");
+    LOG_INFO("modify CORESET0: %s", config.attack.modify_coreset0_idx ? "yes" : "no");
+    LOG_INFO("continuous TX: %s", config.attack.continuous_tx ? "yes" : "no");
+
+    LOG_INFO("[Burst Control]");
+    if (config.attack.max_bursts == 0)
+        LOG_INFO("max bursts: unlimited");
+    else
+        LOG_INFO("max bursts: %llu", (unsigned long long)config.attack.max_bursts);
+
+    LOG_INFO("burst interval: %u us", config.attack.burst_interval_us);
+    LOG_INFO("burst length: %u ms", config.attack.burst_length_ms);
 }
 
 } // namespace ssb_spoofer
-

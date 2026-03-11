@@ -1,9 +1,10 @@
-#ifndef INFLUX_WORKER
-#define INFLUX_WORKER
+#ifndef INFLUX_WORKER_H
+#define INFLUX_WORKER_H
 
 #include "influxdb.hpp"
 #include "srsran/phy/gnb/gnb_dl.h"
 #include "srsran/srslog/srslog.h"
+#include "logger.h"
 #include <mutex>
 #include <vector>
 #include <queue>
@@ -53,7 +54,7 @@ struct DatabaseConfig {
 class InfluxWorker
 {
 public:
-  explicit InfluxWorker(srslog::basic_logger& logger_, const DatabaseConfig config_);
+  explicit InfluxWorker(const DatabaseConfig config_);
   ~InfluxWorker() = default;
 
   // Function to pull messages from influxDB
@@ -76,15 +77,14 @@ public:
 
 
 private:
-  srslog::basic_logger& logger;
   influxdb_cpp::server_info influx_server_info;
 	std::string data_id;
 
-	recon_band_report_t recv_band_report();
-	ChannelConfig recv_channel_config();
-  srsran_mib_nr_t recv_mib();
+	bool recv_band_report(recon_band_report_t& report);
+	bool recv_channel_config(ChannelConfig& ch);
+  bool recv_mib(srsran_mib_nr_t& mib);
 	// TODO
   //bool recv_sib1(const asn1::rrc_nr::sib1_s& sib1);
 };
 
-#endif // INFLUX_WORKER
+#endif // INFLUX_WORKER_H

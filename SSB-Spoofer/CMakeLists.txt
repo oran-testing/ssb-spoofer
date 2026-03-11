@@ -4,7 +4,9 @@ set(SPOOFER_HDR_DIR hdr)
 
 # Common source files (shared between executables)
 set(COMMON_SOURCES
+    "${SPOOFER_SRC_DIR}/influx_worker.cc"
     "${SPOOFER_SRC_DIR}/config.cc"
+    "${SPOOFER_SRC_DIR}/logger.cpp"
     "${SPOOFER_SRC_DIR}/rf_handler.cc"
     "${SPOOFER_SRC_DIR}/ssb_processor.cc"
     "${SPOOFER_SRC_DIR}/app_core.cpp"
@@ -42,6 +44,8 @@ target_link_libraries(ssb_spoofer PRIVATE
 # SSB File Analyzer executable
 add_executable(ssb_file_analyzer
     "${SPOOFER_SRC_DIR}/config.cc"
+		"${SPOOFER_SRC_DIR}/influx_worker.cc"
+    "${SPOOFER_SRC_DIR}/logger.cpp"
     "${SPOOFER_SRC_DIR}/ssb_processor.cc"
     "${SPOOFER_SRC_DIR}/ssb_file_analyzer.cpp"
 )
@@ -65,7 +69,7 @@ target_link_libraries(ssb_file_analyzer PRIVATE
     support
     srslog
     pthread
-		yaml-cpp
+    yaml-cpp
 )
 
 install(TARGETS ssb_spoofer ssb_file_analyzer DESTINATION /usr/local/bin OPTIONAL)

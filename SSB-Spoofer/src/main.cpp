@@ -14,8 +14,8 @@
 #include "rf_handler.h"
 #include "ssb_processor.h"
 #include "app_core.h"
+#include "logger.h"
 
-#include <iostream>
 #include <vector>
 #include <csignal>
 
@@ -29,22 +29,25 @@ int main(int argc, char** argv) {
   std::string config_file = "config.yaml";
   
   for (int i = 1; i < argc; i++) {
-      std::string arg = argv[i];
-      if (arg == "-h" || arg == "--help") {
+    std::string arg = argv[i];
+
+    if (arg == "-h" || arg == "--help") {
       print_usage(argv[0]);
       return 0;
-      } else if (arg == "-c" || arg == "--config") {
+
+    } else if (arg == "-c" || arg == "--config") {
       if (i + 1 < argc) {
-          config_file = argv[++i];
+        config_file = argv[++i];
       } else {
-          std::cerr << "Error: -c option requires an argument" << std::endl;
-          return 1;
+        LOG_ERROR("Error: -c option requires an argument");
+        return 1;
       }
-      } else {
-      std::cerr << "Error: Unknown option " << arg << std::endl;
+
+    } else {
+      LOG_ERROR("Error: Unknown option %s", arg.c_str());
       print_usage(argv[0]);
       return 1;
-      }
+    }
   }
   
   // Setup signal handlers
@@ -52,60 +55,64 @@ int main(int argc, char** argv) {
   std::signal(SIGTERM, signal_handler);
   
   // Load configuration
-  std::cout << "\n  >> Loading configuration from: " << config_file << std::endl;
+  LOG_DEBUG(">> Loading configuration from: %s", config_file.c_str());
+
   Config config;
   if (!ConfigParser::load_from_file(config_file, config)) {
-      std::cerr << "  ERROR: Failed to load configuration" << std::endl;
-      return 1;
+    LOG_ERROR("  ERROR: Failed to load configuration");
+    return 1;
   }
   
   ConfigParser::print(config);
   
   // Initialize RF handler
-  std::cout << "\n  --------------------------------------------------------" << std::endl;
-  std::cout << "            Initializing RF Device" << std::endl;
-  std::cout << "  --------------------------------------------------------"   << std::endl;
+  LOG_DEBUG(" --------------------------------------------------------");
+  LOG_DEBUG("            Initializing RF Device");
+  LOG_DEBUG("  --------------------------------------------------------");
+
   RfHandler rf;
   if (!rf.init(config.rf)) {
-      std::cerr << "  ERROR: Failed to initialize RF device" << std::endl;
-      return 1;
+    LOG_ERROR("  ERROR: Failed to initialize RF device");
+    return 1;
   }
   
   // Initialize SSB processor
-  std::cout << "\n  --------------------------------------------------------" << std::endl;
-  std::cout << "            Initializing SSB Processor" << std::endl;
-  std::cout << "  --------------------------------------------------------"   << std::endl;
+  LOG_DEBUG(" --------------------------------------------------------");
+  LOG_DEBUG("            Initializing SSB Processor");
+  LOG_DEBUG("  --------------------------------------------------------");
+
   SsbProcessor ssb_proc;
   if (!ssb_proc.init(config.ssb, config.rf.srate_hz, config.rf.rx_freq_hz)) {
-      std::cerr << "  ERROR: Failed to initialize SSB processor" << std::endl;
-      return 1;
+    LOG_ERROR("  ERROR: Failed to initialize SSB processor");
+    return 1;
   }
   
   // Scan for target SSB
   SsbSearchResult ssb_result;
+
   if (!scan_for_ssb(rf, ssb_proc, config, ssb_result)) {
-      std::cerr << "\n  --------------------------------------------------------" << std::endl;
-      std::cerr << "            Failed to find target SSB" << std::endl;
-      std::cerr << "  --------------------------------------------------------"   << std::endl;
-      std::cerr << "    Suggestions:" << std::endl;
-      std::cerr << "    - Check RF configuration (frequency, gain, etc.)"         << std::endl;
-      std::cerr << "    - Verify target gNB is transmitting" << std::endl;
-      std::cerr << "    - Try increasing scan duration" << std::endl;
-      std::cerr << "  --------------------------------------------------------"   << std::endl;
-      return 1;
+    LOG_ERROR(" --------------------------------------------------------");
+    LOG_ERROR("            Failed to find target SSB");
+    LOG_ERROR("  --------------------------------------------------------");
+    LOG_ERROR("    Suggestions:");
+    LOG_ERROR("    - Check RF configuration (frequency, gain, etc.)");
+    LOG_ERROR("    - Verify target gNB is transmitting");
+    LOG_ERROR("    - Try increasing scan duration");
+    LOG_ERROR("  --------------------------------------------------------");
+
+    return 1;
   }
   
   // Transmit spoofed SSB
   if (!transmit_spoofed_ssb(rf, ssb_proc, config, ssb_result)) {
-      std::cerr << "  ERROR: Failed to transmit spoofed SSB" << std::endl;
-      return 1;
+    LOG_ERROR("  ERROR: Failed to transmit spoofed SSB");
+    return 1;
   }
   
-
-  std::cout << "\n\n  ======================================================================" << std::endl;
-  std::cout <<     "                     Attack Execution Complete" << std::endl;
-  std::cout <<     "  ======================================================================" << std::endl;
-  std::cout << "\n";
+  LOG_DEBUG("\n  ======================================================================");
+  LOG_DEBUG("                     Attack Execution Complete");
+  LOG_DEBUG("  ======================================================================");
+  LOG_DEBUG("\n");
   
   return 0;
 }
