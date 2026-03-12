@@ -10,6 +10,7 @@
 #ifndef INFLUXDB_CPP_HPP
 #define INFLUXDB_CPP_HPP
 
+#include "logger.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -119,6 +120,8 @@ inline int flux_query(std::string& resp, const std::string& query, const server_
   body << "{\"query\": \"";
   body << query;
   body << "\", \"type\": \"flux\" }";
+
+	LOG_DEBUG("Sending JSON:\b %s", body.str().c_str());
 
   return detail::inner::http_request("POST", "query", "", body.str(), si, &resp);
 }

@@ -2,6 +2,39 @@
 #include <sstream>
 #include <unordered_map>
 
+static std::string json_escape(const std::string& s)
+{
+  std::string out;
+  out.reserve(s.size() * 1.2);
+
+  for (char c : s) {
+    switch (c) {
+      case '\"': out += "\\\""; break;
+      case '\\': out += "\\\\"; break;
+      case '\n': out += "\\n"; break;
+      case '\r': out += "\\r"; break;
+      case '\t': out += "\\t"; break;
+      default:   out += c;
+    }
+  }
+
+  return out;
+}
+
+static void log_fields_map(const std::unordered_map<std::string, std::string>& fields)
+{
+  if (fields.empty()) {
+    LOG_DEBUG("Influx fields map is empty");
+    return;
+  }
+
+  LOG_DEBUG("Influx fields (%zu):", fields.size());
+
+  for (const auto& kv : fields) {
+    LOG_DEBUG("  %s = %s", kv.first.c_str(), kv.second.c_str());
+  }
+}
+
 static std::unordered_map<std::string, std::string> parse_flux_fields(const std::string& resp)
 {
   std::unordered_map<std::string, std::string> result;
@@ -56,22 +89,28 @@ bool InfluxWorker::recv_channel_config(ChannelConfig& ch)
 {
   LOG_INFO("Pulling channel config %s", data_id.c_str());
 
-  std::stringstream query;
+	char query_buf[512];
 
-  query <<
-    "from(bucket: \"" << influx_server_info.bkt_ << "\")"
-    " |> range(start: -10m)"
-    " |> filter(fn: (r) => r._measurement == \"channel_config\")"
-    " |> filter(fn: (r) => r.data_id == \"" << data_id << "\")"
-    " |> last()";
+	snprintf(query_buf, sizeof(query_buf),
+		"from(bucket: \"%s\")\n"
+		"  |> range(start: -1d)\n"
+		"  |> filter(fn: (r) => r._measurement == \"channel_config\")\n"
+		"  |> filter(fn: (r) => r.sni5gect_data_id == \"%s\")\n"
+		"  |> last()",
+		influx_server_info.bkt_.c_str(),
+		data_id.c_str()
+	);
 
+	std::string query(query_buf);
+	LOG_DEBUG("Making flux query: %s\n", query.c_str());
   std::string resp;
-  if (influxdb_cpp::flux_query(resp, query.str(), influx_server_info) != 0) {
-    LOG_ERROR("InfluxDB query failed with error: %s", resp);
+  if (influxdb_cpp::flux_query(resp, json_escape(query), influx_server_info) != 0) {
+    LOG_ERROR("InfluxDB query failed with error: %s", resp.c_str());
     return false;
   }
 
   auto fields = parse_flux_fields(resp);
+	log_fields_map(fields);
 
   ch.rx_frequency = std::stod(fields["rx_frequency"]);
   ch.tx_frequency = std::stod(fields["tx_frequency"]);
@@ -88,28 +127,34 @@ bool InfluxWorker::recv_band_report(recon_band_report_t& report)
 {
   LOG_INFO("Pulling band report %s", data_id.c_str());
 
-  std::stringstream query;
+	char query_buf[512];
 
-  query <<
-    "from(bucket: \"" << influx_server_info.bkt_ << "\")"
-    " |> range(start: -10m)"
-    " |> filter(fn: (r) => r._measurement == \"band_report\")"
-    " |> filter(fn: (r) => r.data_id == \"" << data_id << "\")"
-    " |> last()";
+	snprintf(query_buf, sizeof(query_buf),
+		"from(bucket: \"%s\")\n"
+		"  |> range(start: -10m)\n"
+		"  |> filter(fn: (r) => r._measurement == \"band_report\")\n"
+		"  |> filter(fn: (r) => r.sni5gect_data_id == \"%s\")\n"
+		"  |> last()",
+		influx_server_info.bkt_.c_str(),
+		data_id.c_str()
+	);
 
+	std::string query(query_buf);
+	LOG_DEBUG("Making flux query: %s\n", query.c_str());
   std::string resp;
-  if (influxdb_cpp::flux_query(resp, query.str(), influx_server_info) != 0) {
-    LOG_ERROR("InfluxDB query failed with error: %s", resp);
+  if (influxdb_cpp::flux_query(resp, json_escape(query), influx_server_info) != 0) {
+    LOG_ERROR("InfluxDB query failed with error: %s", resp.c_str());
     return false;
   }
 
   auto fields = parse_flux_fields(resp);
+	log_fields_map(fields);
 
   report.band              = std::stoi(fields["band"]);
   report.nof_prb           = std::stoi(fields["nof_prb"]);
   report.offset_to_carrier = std::stoi(fields["offset_to_carrier"]);
-  report.scs_common        = (srsran_subcarrier_spacing_t)std::stoi(fields["scs_common"]);
-  report.scs_ssb           = (srsran_subcarrier_spacing_t)std::stoi(fields["scs_ssb"]);
+  //report.scs_common        = (srsran_subcarrier_spacing_t)std::stoi(fields["scs_common"]);
+  //report.scs_ssb           = (srsran_subcarrier_spacing_t)std::stoi(fields["scs_ssb"]);
   report.dl_arfcn          = std::stoi(fields["dl_arfcn"]);
   report.ul_arfcn          = std::stoi(fields["ul_arfcn"]);
   report.ssb_arfcn         = std::stoi(fields["ssb_arfcn"]);
@@ -118,7 +163,8 @@ bool InfluxWorker::recv_band_report(recon_band_report_t& report)
   report.ul_freq  = std::stod(fields["ul_freq"]);
   report.ssb_freq = std::stod(fields["ssb_freq"]);
 
-  report.ssb_pattern = (srsran_ssb_pattern_t)std::stoi(fields["ssb_pattern"]);
+  //report.ssb_pattern = (srsran_ssb_pattern_t)std::stoi(fields["ssb_pattern"]);
+	report.ssb_pattern = SRSRAN_SSB_PATTERN_A;
 
   report.sample_rate  = std::stod(fields["sample_rate"]);
   report.uplink_cfo   = std::stod(fields["uplink_cfo"]);
@@ -131,22 +177,28 @@ bool InfluxWorker::recv_mib(srsran_mib_nr_t& mib)
 {
   LOG_INFO("Pulling MIB %s", data_id.c_str());
 
-  std::stringstream query;
+	char query_buf[512];
 
-  query <<
-    "from(bucket: \"" << influx_server_info.bkt_ << "\")"
-    " |> range(start: -10m)"
-    " |> filter(fn: (r) => r._measurement == \"mib\")"
-    " |> filter(fn: (r) => r.data_id == \"" << data_id << "\")"
-    " |> last()";
+	snprintf(query_buf, sizeof(query_buf),
+		"from(bucket: \"%s\")\n"
+		"  |> range(start: -10m)\n"
+		"  |> filter(fn: (r) => r._measurement == \"band_report\")\n"
+		"  |> filter(fn: (r) => r.sni5gect_data_id == \"%s\")\n"
+		"  |> last()",
+		influx_server_info.bkt_.c_str(),
+		data_id.c_str()
+	);
 
+	std::string query(query_buf);
+	LOG_DEBUG("Making flux query: %s\n", query.c_str());
   std::string resp;
-  if (influxdb_cpp::flux_query(resp, query.str(), influx_server_info) != 0) {
-    LOG_ERROR("InfluxDB query failed with error: %s", resp);
+  if (influxdb_cpp::flux_query(resp, json_escape(query), influx_server_info) != 0) {
+    LOG_ERROR("InfluxDB query failed with error: %s", resp.c_str());
     return false;
   }
 
   auto fields = parse_flux_fields(resp);
+	log_fields_map(fields);
 
   auto to_bool = [](const std::string& v) {
     return v == "true" || v == "t" || v == "1";
