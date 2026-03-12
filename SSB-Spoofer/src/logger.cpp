@@ -57,25 +57,25 @@ void logger_log(log_level_t level, const char *fmt, ...)
 
     /* Print prefix */
     if (enable_colors) {
-        fprintf(stderr, "%s", level_colors[level]);
+        fprintf(stdout, "%s", level_colors[level]);
     }
 
-    fprintf(stderr, "[%s] %-5s: ",
+    fprintf(stdout, "[%s] %-5s: ",
             time_buf,
             level_strings[level]);
 
     if (enable_colors) {
-        fprintf(stderr, "%s", COLOR_RESET);
+        fprintf(stdout, "%s", COLOR_RESET);
     }
 
     /* Print message */
     va_list args;
     va_start(args, fmt);
-    vfprintf(stderr, fmt, args);
+    vfprintf(stdout, fmt, args);
     va_end(args);
 
-    fprintf(stderr, "\n");
-    fflush(stderr);
+    fprintf(stdout, "\n");
+    fflush(stdout);
 
     pthread_mutex_unlock(&log_mutex);
 }
