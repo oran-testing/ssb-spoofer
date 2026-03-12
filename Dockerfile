@@ -17,11 +17,11 @@ RUN cmake -DENABLE_ZEROMQ=ON .. && \
     make -j$(nproc) && \
     make install
 
-FROM alpine:latest
-ENV PYTHONUNBUFFERED=1
+#FROM alpine:latest
+#ENV PYTHONUNBUFFERED=1
 RUN apk add --no-cache libstdc++ ca-certificates && update-ca-certificates || true
 
-COPY --from=builder /usr/local/bin/ssb_spoofer /usr/local/bin/ssb_spoofer
+#COPY --from=builder /usr/local/bin/ssb_spoofer /usr/local/bin/ssb_spoofer
 
 ENV ARGS=""
 
