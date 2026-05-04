@@ -15,8 +15,8 @@
 namespace ssb_spoofer {
 
 /**
-* RF configuration parameters
-*/
+ * RF configuration parameters
+ */
 struct RfConfig {
   std::string device_name;
   std::string device_args;
@@ -28,8 +28,8 @@ struct RfConfig {
 };
 
 /**
-* SSB configuration parameters
-*/
+ * SSB configuration parameters
+ */
 struct SsbConfig {
   std::string pattern;
   uint32_t    scs_khz; 
@@ -44,8 +44,8 @@ struct SsbConfig {
 };
 
 /** 
-* Attack configuration parameters
-*/
+ * Attack configuration parameters
+ */
 struct AttackConfig {
   uint32_t  target_pci;
   bool      scan_for_target;
@@ -73,8 +73,8 @@ struct AttackConfig {
 };
 
 /**
-* Operational parameters
-*/
+ * Operational parameters
+ */
 struct OperationalConfig {
   double scan_duration_sec;
   std::string log_level;
@@ -84,9 +84,18 @@ struct OperationalConfig {
 
 };
 
+struct DatabaseConfig {
+  std::string host;
+  uint32_t port;
+  std::string org;
+  std::string token;
+  std::string bucket;
+  std::string data_id;
+};
+
 /**
-* Complete configuration structure
-*/
+ * Complete configuration structure
+ */
 struct Config {
 	DatabaseConfig database;
   RfConfig rf;
@@ -96,24 +105,19 @@ struct Config {
 };
 
 /**
-* Configuration parser
-*/
+ * Configuration parser
+ */
 class ConfigParser {
 public:
-	static bool load_from_file(const std::string& filename, Config& config);
-  /**
-  * Validate configuration parameters
-  * @param config Configuration to validate
-  * @return true if successful, false otherwise
-  */
+  static bool load_from_file(const std::string& filename, Config& config) {
+    return load_from_file_local(filename, config);
+  }
+
   static bool validate(const Config& config);
-  
-  /**
-  * print configuration to console
-  * @param config Configuration to print 
-  */
   static void print(const Config& config);
 
+private:
+  static bool load_from_file_local(const std::string& filename, Config& config);
 };
 
 } // namespace ssb_spoofer

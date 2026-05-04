@@ -1,58 +1,9 @@
 #include "config.h"
+#include "rt-recon-sdk/autoconfig/config.h"
 
 namespace ssb_spoofer {
 
-bool load_from_influxdb(Config& config)
-{
-    LOG_INFO("Loading configuration from InfluxDB");
-
-    InfluxWorker influx(config.database);
-
-    ChannelConfig ch;
-    recon_band_report_t band;
-
-    if (!influx.pull_msg(ch)) {
-        LOG_ERROR("Failed to load ChannelConfig from InfluxDB");
-        return false;
-    }
-
-    if (!influx.pull_msg(band)) {
-        LOG_ERROR("Failed to load band report from InfluxDB");
-        return false;
-    }
-
-    // RF configuration
-    config.rf.rx_freq_hz = ch.rx_frequency + ch.rx_offset;
-    config.rf.tx_freq_hz = ch.tx_frequency + ch.tx_offset;
-
-    config.rf.rx_gain_db = ch.rx_gain;
-    config.rf.tx_gain_db = ch.tx_gain;
-
-    // SSB / PHY parameters
-    config.ssb.scs_khz = (band.scs_common == srsran_subcarrier_spacing_15kHz) ? 15 : 30;
-
-    switch (band.ssb_pattern) {
-        case SRSRAN_SSB_PATTERN_A: config.ssb.pattern = "A"; break;
-        case SRSRAN_SSB_PATTERN_B: config.ssb.pattern = "B"; break;
-        case SRSRAN_SSB_PATTERN_C: config.ssb.pattern = "C"; break;
-        case SRSRAN_SSB_PATTERN_D: config.ssb.pattern = "D"; break;
-        case SRSRAN_SSB_PATTERN_E: config.ssb.pattern = "E"; break;
-        default: config.ssb.pattern = "INVALID"; break;
-    }
-
-    config.ssb.ssb_freq_offset_hz =
-        band.ssb_freq - ch.rx_frequency;
-
-    LOG_DEBUG("Auto-configured RF from InfluxDB");
-    LOG_DEBUG("RX freq: %.3f MHz", config.rf.rx_freq_hz / 1e6);
-    LOG_DEBUG("TX freq: %.3f MHz", config.rf.tx_freq_hz / 1e6);
-    LOG_DEBUG("RX gain: %.2f dB", config.rf.rx_gain_db);
-    LOG_DEBUG("TX gain: %.2f dB", config.rf.tx_gain_db);
-
-    return true;
-}
-
-bool ConfigParser::load_from_file(const std::string& filename, Config& config)
+bool ConfigParser::load_from_file_local(const std::string& filename, Config& config)
 {
     YAML::Node root;
 
@@ -158,10 +109,31 @@ bool ConfigParser::load_from_file(const std::string& filename, Config& config)
                                 root["enable_autoconfigure"].as<bool>() : false;
 
     if (enable_autoconfigure) {
-        if (!load_from_influxdb(config)) {
+        // Use rt-recon-sdk for InfluxDB autoconfiguration
+        rtrs::Config rtrs_config;
+        rtrs::DatabaseConfig rtrs_db;
+        rtrs_db.host = config.database.host;
+        rtrs_db.port = config.database.port;
+        rtrs_db.org = config.database.org;
+        rtrs_db.token = config.database.token;
+        rtrs_db.bucket = config.database.bucket;
+        rtrs_db.data_id = config.database.data_id;
+
+        rtrs_config.database = rtrs_db;
+
+        if (!rtrs::ConfigParser::load_from_influxdb(rtrs_config)) {
             LOG_ERROR("InfluxDB auto configuration failed");
             return false;
         }
+
+        // Convert back from rtrs::Config to local Config
+        config.rf.rx_freq_hz = rtrs_config.rf.rx_freq_hz;
+        config.rf.tx_freq_hz = rtrs_config.rf.tx_freq_hz;
+        config.rf.rx_gain_db = rtrs_config.rf.rx_gain_db;
+        config.rf.tx_gain_db = rtrs_config.rf.tx_gain_db;
+        config.ssb.scs_khz = rtrs_config.ssb.scs_khz;
+        config.ssb.pattern = rtrs_config.ssb.pattern;
+        config.ssb.ssb_freq_offset_hz = rtrs_config.ssb.ssb_freq_offset_hz;
     }
 
     return validate(config);

@@ -1,10 +1,10 @@
 #ifndef INFLUX_WORKER_H
 #define INFLUX_WORKER_H
 
-#include "influxdb.hpp"
+#include "rt-recon-sdk/autoconfig/influxdb.hpp"
+#include "rt-recon-sdk/autoconfig/logger.h"
 #include "srsran/phy/gnb/gnb_dl.h"
 #include "srsran/srslog/srslog.h"
-#include "logger.h"
 #include <mutex>
 #include <vector>
 #include <queue>
