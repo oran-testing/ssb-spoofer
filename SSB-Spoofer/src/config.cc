@@ -5,9 +5,17 @@
 #include <iostream>
 #include <sstream>
 #include <map>
-#include <yaml-cpp/yaml.h>
 
 namespace ssb_spoofer {
+
+bool load_from_influxdb(Config& config, YAML::Node root) {
+	if(!root["influxdb"]) return false;
+
+	auto db = root["influxdb"];
+
+	config.database.host = db["host"] ? db["host"].as<std::string>() : "localhost";
+	return true;
+}
 
 bool ConfigParser::load_from_file(const std::string& filename, Config& config)
 {
@@ -92,30 +100,12 @@ bool ConfigParser::load_from_file(const std::string& filename, Config& config)
 
 		bool enable_autoconfigure = root["enable_autoconfigure"] ? root["enable_autoconfigure"].as<bool>() : false;
 		if(enable_autoconfigure){
-			if(!load_from_influxdb(config)) return false;
+			if(!load_from_influxdb(config, root)) return false;
 		}
 
     return validate(config);
 }
 
-static bool load_from_influxdb(Config& config) {
-	if(!root["influxdb"]) return false;
-
-	auto db = root["influxdb"];
-
-	config.database.host = db["scan_duration_sec"] ? db["scan_duration_sec"].as<double>() : 10.0;
-	
-
-struct DatabaseConfig {
-  std::string host;
-  uint32_t port;
-  std::string org;
-  std::string token;
-  std::string bucket;
-  std::string data_id;
-};
-
-}
 
 
 bool ConfigParser::validate(const Config& config) {

@@ -3,6 +3,7 @@
 
 #include <string> 
 #include <cstdint>
+#include <yaml-cpp/yaml.h>
 #include "influx_worker.h"
 
 namespace ssb_spoofer {
@@ -93,8 +94,7 @@ struct Config {
 */
 class ConfigParser {
 public:
-	static bool load_from_file(const std::string& filename, Config& config);
-  static bool load_from_influxdb(Config& config);
+  static bool load_from_file(const std::string& filename, Config& config);
   /**
   * Validate configuration parameters
   * @param config Configuration to validate
