@@ -12,8 +12,6 @@ RUN sed -i 's|#include "srsran/srslog/sink.h"|#include "srsran/srslog/sink.h"\n#
 
 RUN mkdir -p build && rm -rf build/*
 
-RUN apk add --no-cache mbedtls
-
 WORKDIR /spoofer/build
 RUN cmake -DENABLE_ZEROMQ=ON .. && \
     make -j$(nproc) && \
