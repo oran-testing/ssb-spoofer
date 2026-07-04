@@ -13,16 +13,12 @@ RUN sed -i 's|#include "srsran/srslog/sink.h"|#include "srsran/srslog/sink.h"\n#
 RUN mkdir -p build && rm -rf build/*
 
 WORKDIR /spoofer/build
-RUN cmake -DENABLE_ZEROMQ=ON .. && \
+RUN cmake -DENABLE_ZEROMQ=ON -DENABLE_UHD=OFF -DENABLE_SKIQ=OFF .. && \
     make -j$(nproc) && \
     make install
 
-FROM alpine:latest
-
 ENV PYTHONUNBUFFERED=1
-RUN apk add --no-cache libstdc++ ca-certificates mbedtls && update-ca-certificates || true
-
-COPY --from=builder /usr/local/bin/ssb_spoofer /usr/local/bin/ssb_spoofer
+RUN apk add --no-cache libstdc++ ca-certificates mbedtls yaml-cpp fftw-single-libs && update-ca-certificates || true
 
 ENV ARGS=""
 

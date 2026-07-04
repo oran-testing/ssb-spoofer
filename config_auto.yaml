@@ -18,12 +18,12 @@ database:
 # RF Configuration
 # --------------------------------------------------------
 rf:
-  device_name: "uhd"
-  device_args: "type=b200"
+  device_name: "zmq"
+  device_args: "tx_port=tcp://*:6000,rx_port=tcp://172.17.0.1:5000,base_srate=23.04e6"
 
   # These can be auto-configured from InfluxDB ChannelConfig
-  #rx_freq_hz: 1842050000
-  #tx_freq_hz: 1842050000
+  #rx_freq_hz: 1842500000
+  #tx_freq_hz: 1842500000
 
   srate_hz: 23040000
 

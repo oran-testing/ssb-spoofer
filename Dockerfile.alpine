@@ -1,5 +1,7 @@
 FROM ghcr.io/oran-testing/components_base
 
+RUN apk add mbedtls-dev
+
 WORKDIR /spoofer
 
 COPY . .

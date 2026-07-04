@@ -2,11 +2,11 @@
 
 # RF Configuration
 rf:
-  device_name: "uhd"
-  device_args: "type=b200"
+  device_name: "zmq"
+  device_args: "tx_port=tcp://*:6000,rx_port=tcp://172.17.0.1:5000,base_srate=23.04e6"
   
-  rx_freq_hz: 1842050000          # RX center frequency (Hz)
-  tx_freq_hz: 1842050000          # TX center frequency (Hz)
+  rx_freq_hz: 1842500000          # RX center frequency (Hz)
+  tx_freq_hz: 1842500000          # TX center frequency (Hz)
   
   srate_hz: 23040000              # Sample rate: 23.04 MHz
   
@@ -20,7 +20,7 @@ ssb:
   periodicity_ms: 10              # SSB periodicity for scanning
                                   # (used by detector, NOT transmission timing!)
   
-  ssb_freq_offset_hz: 0           # SSB frequency offset from center
+  ssb_freq_offset_hz: -450000     # SSB frequency offset from center
   
   # Power allocation - Modify for attack effectiveness!
   # Higher values = more power
@@ -60,8 +60,8 @@ attack:
 
 # Operational Parameters
 operation:
-  scan_duration_sec: 30.0
-  log_level: "info"
-  log_file: "ssb_spoofer.log"
+  scan_duration_sec: 15.0
+  log_level: "debug"
+  log_file: "/tmp/ssb_spoofer.log"
   save_samples: false
-  samples_file: "rx_samples.dat"
+  samples_file: "/tmp/rx_samples.dat"
